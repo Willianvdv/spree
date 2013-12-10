@@ -176,13 +176,28 @@ describe Spree::Product do
     end
 
     context "variants_and_option_values" do
-      let!(:high) { create(:variant, product: product) }
       let!(:low) { create(:variant, product: product) }
+      let!(:high) { create(:variant, product: product) }
 
-      before { high.option_values.destroy_all }
+      describe 'ordering' do
+        before {
+          high.position = 10
+          high.save!
+          low.position = 1
+          low.save!          
+        }
 
-      it "returns only variants with option values" do
-        product.variants_and_option_values.should == [low]
+        it 'should be ordered on the variants position' do
+          product.variants_and_option_values.should == [low, high]
+        end
+      end
+
+      context 'without highs option values' do
+        before { high.option_values.destroy_all }
+
+        it "returns only variants with option values" do
+          product.variants_and_option_values.should == [low]
+        end
       end
     end
 
