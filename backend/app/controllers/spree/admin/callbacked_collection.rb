@@ -1,6 +1,15 @@
 module Spree
   module Admin
-    class CallbackedController < ResourceController
+    module CallbackedCollection
+      extend ActiveSupport::Concern
+
+      included do
+        include ActiveSupport::Callbacks
+
+        define_callbacks :load_collection
+        set_callback :load_collection, :after, :paginate_collection
+        set_callback :load_collection, :after, :search
+      end
 
       protected
 
@@ -10,7 +19,7 @@ module Spree
       end
 
       def per_page
-        params[:per_page]
+        Spree::Config["#{controller_name}_per_page".to_sym] || 15
       end
 
       def collection
@@ -18,7 +27,7 @@ module Spree
 
         @search_params = search_params
 
-        run_callbacks "load_#{controller_name}_collection".to_sym do
+        run_callbacks "load_collection".to_sym do
            @collection = super
         end
 

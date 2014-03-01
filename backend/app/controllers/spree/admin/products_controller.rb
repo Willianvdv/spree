@@ -1,7 +1,7 @@
 module Spree
   module Admin
-    class ProductsController < CallbackedController
-      include ActiveSupport::Callbacks
+    class ProductsController < ResourceController
+      include CallbackedCollection
 
       helper 'spree/products'
 
@@ -11,13 +11,10 @@ module Spree
       update.before :update_before
       helper_method :clone_object_url
 
-      define_callbacks :load_products_collection
-      set_callback :load_products_collection, :before, :update_search_params
-      set_callback :load_products_collection, :before, :remove_deleted_at_from_search_params
-      set_callback :load_products_collection, :after, :include_deleted_products_if_needed
-      set_callback :load_products_collection, :after, :decorate_collection
-      set_callback :load_products_collection, :after, :paginate_collection
-      set_callback :load_products_collection, :after, :search
+      set_callback :load_collection, :before, :update_search_params
+      set_callback :load_collection, :before, :remove_deleted_at_from_search_params
+      set_callback :load_collection, :after, :include_deleted_products_if_needed
+      set_callback :load_collection, :after, :decorate_collection
 
       def show
         session[:return_to] ||= request.referer

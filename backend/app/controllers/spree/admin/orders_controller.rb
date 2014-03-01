@@ -1,21 +1,16 @@
-# TODO: REMINDER:index is missing distinct: true
-
 module Spree
   module Admin
-    class OrdersController < CallbackedController
-      include ActiveSupport::Callbacks
+    class OrdersController < ResourceController
+      include CallbackedCollection
 
       before_filter :initialize_order_events
       before_filter :load_order, :only => [:edit, :update, :cancel, :resume, :approve, :resend, :open_adjustments, :close_adjustments]
 
       respond_to :html
 
-      # define_callbacks :load_orders_collection
-      # set_callback :load_orders_collection, :before, :show_only_complete_orders
-      # set_callback :load_orders_collection, :before, :created_in_time_span
-      # set_callback :load_orders_collection, :after, :limit_accessibility
-      # set_callback :load_orders_collection, :after, :paginate_collection
-      # set_callback :load_orders_collection, :after, :search
+      set_callback :load_collection, :before, :show_only_complete_orders
+      set_callback :load_collection, :before, :created_in_time_span
+      set_callback :load_collection, :after, :limit_accessibility
 
       def index
         @orders = collection
@@ -90,10 +85,6 @@ module Spree
       end
 
       private
-        def per_page
-          super || Spree::Config[:orders_per_page]
-        end
-
         def limit_accessibility
           @collection = @collection.accessible_by(current_ability, :index)
         end
