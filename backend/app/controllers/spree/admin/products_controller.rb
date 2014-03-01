@@ -1,12 +1,16 @@
 module Spree
   module Admin
-    class ProductsController < ResourceController
+    class ProductsController < CallbackedController
       helper 'spree/products'
 
       before_filter :load_data, :except => :index
+
       create.before :create_before
       update.before :update_before
       helper_method :clone_object_url
+
+      set_callback :load_collection, :after, :include_deleted_if_needed
+      set_callback :load_collection, :after, :add_product_extras
 
       def show
         session[:return_to] ||= request.referer
@@ -75,6 +79,36 @@ module Spree
         end
       end
 
+      private
+
+      def prepare_search_params
+        @search_params = params
+        @search_params[:q] ||= {}
+        @search_params[:q][:deleted_at_null] ||= "1"
+        @search_params[:q][:s] ||= "name asc"
+
+        # Hackish. Without this ranshack will filter on `deleted_at_null`. But we want to use
+        # the `with_deleted` method. So by deleting `deleted_at_null` the order of load_collection
+        # callbacks doen't effect the collection query
+        @index_includes_deleted_products = @search_params[:q].delete(:deleted_at_null).blank?
+      end
+
+      def search_params
+        unless @search_params
+          prepare_search_params
+        end
+        @search_params
+      end
+
+      def add_product_extras
+        @collection = @collection.distinct_by_product_ids(search_params[:q][:s])
+                                 .includes(product_includes)
+      end
+
+      def include_deleted_if_needed
+        @collection = @collection.with_deleted if @index_includes_deleted_products
+      end
+
       protected
 
         def find_resource
@@ -92,25 +126,6 @@ module Spree
           @shipping_categories = ShippingCategory.order(:name)
         end
 
-        def collection
-          return @collection if @collection.present?
-          params[:q] ||= {}
-          params[:q][:deleted_at_null] ||= "1"
-
-          params[:q][:s] ||= "name asc"
-          @collection = super
-          @collection = @collection.with_deleted if params[:q].delete(:deleted_at_null).blank?
-          # @search needs to be defined as this is passed to search_form_for
-          @search = @collection.ransack(params[:q])
-          @collection = @search.result.
-                distinct_by_product_ids(params[:q][:s]).
-                includes(product_includes).
-                page(params[:page]).
-                per(Spree::Config[:admin_products_per_page])
-
-          @collection
-        end
-
         def create_before
           return if params[:product][:prototype_id].blank?
           @prototype = Spree::Prototype.find(params[:product][:prototype_id])
@@ -125,7 +140,7 @@ module Spree
         def product_includes
           [{ :variants => [:images, { :option_values => :option_type }], :master => [:images, :default_price]}]
         end
-        
+
         def clone_object_url resource
           clone_admin_product_url resource
         end
