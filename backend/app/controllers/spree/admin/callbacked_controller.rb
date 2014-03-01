@@ -1,11 +1,6 @@
 module Spree
   module Admin
     class CallbackedController < ResourceController
-      include ActiveSupport::Callbacks
-
-      define_callbacks :load_collection
-      set_callback :load_collection, :after, :paginate_collection, prepend: true
-      set_callback :load_collection, :after, :search, prepend: true
 
       protected
 
@@ -23,7 +18,7 @@ module Spree
 
         @search_params = search_params
 
-        run_callbacks :load_collection do
+        run_callbacks "load_#{controller_name}_collection".to_sym do
            @collection = super
         end
 
@@ -36,7 +31,7 @@ module Spree
 
       def search
         @search = @collection.ransack(@search_params[:q])
-        @collection = @search.result(distinct: true)
+        @collection = @search.result
       end
     end
   end

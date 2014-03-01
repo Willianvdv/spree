@@ -1,6 +1,8 @@
 module Spree
   module Admin
     class ProductsController < CallbackedController
+      include ActiveSupport::Callbacks
+
       helper 'spree/products'
 
       before_filter :load_data, :except => :index
@@ -9,8 +11,13 @@ module Spree
       update.before :update_before
       helper_method :clone_object_url
 
-      set_callback :load_collection, :after, :include_deleted_if_needed
-      set_callback :load_collection, :after, :decorate_collection
+      define_callbacks :load_products_collection
+      set_callback :load_products_collection, :before, :update_search_params
+      set_callback :load_products_collection, :before, :remove_deleted_at_from_search_params
+      set_callback :load_products_collection, :after, :include_deleted_products_if_needed
+      set_callback :load_products_collection, :after, :decorate_collection
+      set_callback :load_products_collection, :after, :paginate_collection
+      set_callback :load_products_collection, :after, :search
 
       def show
         session[:return_to] ||= request.referer
@@ -81,31 +88,24 @@ module Spree
 
       private
 
-      def prepare_search_params
-        @search_params = params
-        @search_params[:q] ||= {}
+      def update_search_params
         @search_params[:q][:deleted_at_null] ||= "1"
         @search_params[:q][:s] ||= "name asc"
+      end
 
+      def remove_deleted_at_from_search_params
         # Hackish. Without this ranshack will filter on `deleted_at_null`. But we want to use
         # the `with_deleted` method. So by deleting `deleted_at_null` the order of load_collection
         # callbacks doen't effect the collection query
         @index_includes_deleted_products = @search_params[:q].delete(:deleted_at_null).blank?
       end
 
-      def search_params
-        unless @search_params
-          prepare_search_params
-        end
-        @search_params
-      end
-
       def decorate_collection
-        @collection = @collection.distinct_by_product_ids(search_params[:q][:s])
+        @collection = @collection.distinct_by_product_ids(@search_params[:q][:s])
                                  .includes(product_includes)
       end
 
-      def include_deleted_if_needed
+      def include_deleted_products_if_needed
         @collection = @collection.with_deleted if @index_includes_deleted_products
       end
 
@@ -138,7 +138,8 @@ module Spree
         end
 
         def product_includes
-          [{ :variants => [:images, { :option_values => :option_type }], :master => [:images, :default_price]}]
+          [{ :variants => [:images, { :option_values => :option_type }],
+             :master => [:images, :default_price]}]
         end
 
         def clone_object_url resource
