@@ -10,7 +10,7 @@ module Spree
       helper_method :clone_object_url
 
       set_callback :load_collection, :after, :include_deleted_if_needed
-      set_callback :load_collection, :after, :add_product_extras
+      set_callback :load_collection, :after, :decorate_collection
 
       def show
         session[:return_to] ||= request.referer
@@ -100,7 +100,7 @@ module Spree
         @search_params
       end
 
-      def add_product_extras
+      def decorate_collection
         @collection = @collection.distinct_by_product_ids(search_params[:q][:s])
                                  .includes(product_includes)
       end

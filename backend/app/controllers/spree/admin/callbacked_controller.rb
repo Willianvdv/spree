@@ -14,8 +14,14 @@ module Spree
         params
       end
 
+      def per_page
+        params[:per_page]
+      end
+
       def collection
         return @collection if @collection.present?
+
+        @search_params = search_params
 
         run_callbacks :load_collection do
            @collection = super
@@ -25,13 +31,12 @@ module Spree
       end
 
       def paginate_collection
-        # TODO: Dont use hard code per page
-        @collection = @collection.page(params[:page]).per(15)
+        @collection = @collection.page(params[:page]).per(per_page || 15)
       end
 
       def search
-        @search = @collection.ransack(search_params[:q])
-        @collection = @search.result
+        @search = @collection.ransack(@search_params[:q])
+        @collection = @search.result(distinct: true)
       end
     end
   end
