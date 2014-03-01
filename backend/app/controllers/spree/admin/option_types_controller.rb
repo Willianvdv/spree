@@ -24,8 +24,8 @@ module Spree
           end
         end
 
-
       private
+
         def load_product
           @product = Product.find_by_param!(params[:product_id])
         end

@@ -24,7 +24,7 @@ module Spree
       end
 
       def destroy
-        find_adjustment 
+        find_adjustment
         super
       end
 
