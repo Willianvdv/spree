@@ -1,20 +1,50 @@
 module Spree
   module Admin
-    class OrdersController < ResourceController
-      include CallbackedCollection
-
+    class OrdersController < Spree::Admin::BaseController
       before_filter :initialize_order_events
       before_filter :load_order, :only => [:edit, :update, :cancel, :resume, :approve, :resend, :open_adjustments, :close_adjustments]
 
       respond_to :html
 
-      set_callback :load_collection, :before, :show_only_complete_orders
-      set_callback :load_collection, :before, :created_in_time_span
-      set_callback :load_collection, :after, :limit_accessibility
-
       def index
-        @orders = collection
-        respond_with(@orders)
+        params[:q] ||= {}
+        params[:q][:completed_at_not_null] ||= '1' if Spree::Config[:show_only_complete_orders_by_default]
+        @show_only_completed = params[:q][:completed_at_not_null] == '1'
+        params[:q][:s] ||= @show_only_completed ? 'completed_at desc' : 'created_at desc'
+
+        # As date params are deleted if @show_only_completed, store
+        # the original date so we can restore them into the params
+        # after the search
+        created_at_gt = params[:q][:created_at_gt]
+        created_at_lt = params[:q][:created_at_lt]
+
+        params[:q].delete(:inventory_units_shipment_id_null) if params[:q][:inventory_units_shipment_id_null] == "0"
+
+        if !params[:q][:created_at_gt].blank?
+          params[:q][:created_at_gt] = Time.zone.parse(params[:q][:created_at_gt]).beginning_of_day rescue ""
+        end
+
+        if !params[:q][:created_at_lt].blank?
+          params[:q][:created_at_lt] = Time.zone.parse(params[:q][:created_at_lt]).end_of_day rescue ""
+        end
+
+        if @show_only_completed
+          params[:q][:completed_at_gt] = params[:q].delete(:created_at_gt)
+          params[:q][:completed_at_lt] = params[:q].delete(:created_at_lt)
+        end
+
+        @search = Order.accessible_by(current_ability, :index).ransack(params[:q])
+
+        # lazyoading other models here (via includes) may result in an invalid query
+        # e.g. SELECT  DISTINCT DISTINCT "spree_orders".id, "spree_orders"."created_at" AS alias_0 FROM "spree_orders"
+        # see https://github.com/spree/spree/pull/3919
+        @orders = @search.result(distinct: true).
+          page(params[:page]).
+          per(params[:per_page] || Spree::Config[:orders_per_page])
+
+        # Restore dates
+        params[:q][:created_at_gt] = created_at_gt
+        params[:q][:created_at_lt] = created_at_lt
       end
 
       def new
@@ -65,6 +95,7 @@ module Spree
       def resend
         OrderMailer.confirm_email(@order.id, true).deliver
         flash[:success] = Spree.t(:order_email_resent)
+
         redirect_to :back
       end
 
@@ -85,45 +116,6 @@ module Spree
       end
 
       private
-        def limit_accessibility
-          @collection = @collection.accessible_by(current_ability, :index)
-        end
-
-        def show_only_complete_orders
-          @search_params[:q][:completed_at_not_null] ||= '1' if Spree::Config[:show_only_complete_orders_by_default]
-          @show_only_completed = @search_params[:q][:completed_at_not_null] == '1'
-          @search_params[:q][:s] ||= @show_only_completed ? 'completed_at desc' : 'created_at desc'
-
-          #if @show_only_completed
-          #  params[:q][:completed_at_gt] = params[:q].delete(:created_at_gt)
-          #  params[:q][:completed_at_lt] = params[:q].delete(:created_at_lt)
-          #end
-        end
-
-        def created_in_time_span
-          # As date params are deleted if @show_only_completed, store
-          # the original date so we can restore them into the params
-          # after the search
-
-          created_at_gt = @search_params[:q][:created_at_gt]
-          created_at_lt = @search_params[:q][:created_at_lt]
-
-          # ?
-          if @search_params[:q][:inventory_units_shipment_id_null] == "0"
-            @search_params[:q].delete(:inventory_units_shipment_id_null)
-          end
-
-          if !@search_params[:q][:created_at_gt].blank?
-            timezoned_created_at_gt = Time.zone.parse @search_params[:q][:created_at_gt]
-            @search_params[:q][:created_at_gt] = timezoned_created_at_gt.beginning_of_day rescue ""
-          end
-
-          if !@search_params[:q][:created_at_lt].blank?
-            timezoned_created_at_lt = Time.zone.parse @search_params[:q][:created_at_lt]
-            @search_params[:q][:created_at_lt] = timezoned_created_at_lt.end_of_day rescue ""
-          end
-        end
-
         def load_order
           @order = Order.includes(:adjustments).find_by_number!(params[:id])
           authorize! action, @order
