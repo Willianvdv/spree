@@ -1,7 +1,38 @@
+require 'spree/backend/calledback_collection'
+
 module Spree
   module Admin
+    module Products
+      module Collection
+
+        private
+
+        def update_search_params
+          @search_params[:q][:deleted_at_null] ||= "1"
+          @search_params[:q][:s] ||= "name asc"
+        end
+
+        def remove_deleted_at_from_search_params
+          # Hackish. Without this ranshack will filter on `deleted_at_null`. But we want to use
+          # the `with_deleted` method. So by deleting `deleted_at_null` the order of load_collection
+          # callbacks doen't effect the collection query
+          @index_includes_deleted_products = @search_params[:q].delete(:deleted_at_null).blank?
+        end
+
+        def decorate_collection
+          @collection = @collection.distinct_by_product_ids(@search_params[:q][:s])
+                                   .includes(product_includes)
+        end
+
+        def include_deleted_products_if_needed
+          @collection = @collection.with_deleted if @index_includes_deleted_products
+        end
+      end
+    end
+
     class ProductsController < ResourceController
-      include CallbackedCollection
+      include Spree::CallbackedCollection
+      include Products::Collection
 
       helper 'spree/products'
 
@@ -81,29 +112,6 @@ module Spree
           flash[:error] = Spree.t(:stock_management_requires_a_stock_location)
           redirect_to admin_stock_locations_path
         end
-      end
-
-      private
-
-      def update_search_params
-        @search_params[:q][:deleted_at_null] ||= "1"
-        @search_params[:q][:s] ||= "name asc"
-      end
-
-      def remove_deleted_at_from_search_params
-        # Hackish. Without this ranshack will filter on `deleted_at_null`. But we want to use
-        # the `with_deleted` method. So by deleting `deleted_at_null` the order of load_collection
-        # callbacks doen't effect the collection query
-        @index_includes_deleted_products = @search_params[:q].delete(:deleted_at_null).blank?
-      end
-
-      def decorate_collection
-        @collection = @collection.distinct_by_product_ids(@search_params[:q][:s])
-                                 .includes(product_includes)
-      end
-
-      def include_deleted_products_if_needed
-        @collection = @collection.with_deleted if @index_includes_deleted_products
       end
 
       protected

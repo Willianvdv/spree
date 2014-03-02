@@ -1,5 +1,11 @@
 module Spree
   module Admin
+    module Orders
+      module Collection
+
+      end
+    end
+
     class OrdersController < Spree::Admin::BaseController
       before_filter :initialize_order_events
       before_filter :load_order, :only => [:edit, :update, :cancel, :resume, :approve, :resend, :open_adjustments, :close_adjustments]
